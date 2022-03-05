@@ -95,25 +95,48 @@ done:
 	return ret;
 }
 
+#include "menu.h"
+
+extern PrintConsole* g_fbConsole;
+
 int main(int argc, char *argv[])
 {
+	static const char* device = "sdmc";
+
+	const char* elfPath = SelectElfMenu("sdmc");
+	log_to_fb_console = true;
+	g_fbConsole = consoleInit(NULL);
+	consoleClear();
+	consoleSelect(g_fbConsole);
+	LOG("vita2hos " VITA2HOS_MAJOR "." VITA2HOS_MINOR "." VITA2HOS_PATCH "-" VITA2HOS_HASH
+	    " (" __DATE__ " " __TIME__ ")");
+
+	if (elfPath == NULL) {
+		LOG("error getting path of executable to load");
+		return 0;
+	}
+
+	LOG("Loading %s:%s\n", device, elfPath);
+
 	Jit jit;
 	void *entry;
 	int ret;
 
-	log_to_fb_console = false;
 
-	LOG("vita2hos " VITA2HOS_MAJOR "." VITA2HOS_MINOR "." VITA2HOS_PATCH "-" VITA2HOS_HASH
-	    " (" __DATE__ " " __TIME__ ")");
+	
 
 	register_modules();
 
-	ret = load_exe(&jit, VITA_EXE_PATH, &entry);
+	ret = load_exe(&jit, elfPath, &entry);
 	if (ret == 0) {
-		LOG("Launching PlayStation Vita executable!");
+		LOG("Launching PlayStation Vita executable '%s'!", elfPath);
+		consoleExit(NULL);
+		g_fbConsole = NULL;
 
 		/* Jump to Vita's executable entrypoint */
 		ret = launch(entry);
+
+		g_fbConsole = consoleInit(NULL);
 
 		LOG("Returned from launch with result: %d", ret);
 
@@ -121,8 +144,10 @@ int main(int argc, char *argv[])
 		ret = jitClose(&jit);
 		LOG("jitClose() returned: 0x%x", ret);
 	} else {
+		static const char errDescription[512] = {0};
+		snprintf(errDescription, "Error 0x%x loading %s.", ret, elfPath);
 		fatal_error("Error loading PlayStation Vita executable.",
-			    "Make sure to place it to " VITA_EXE_PATH);
+			    "Fatal error - failed to load executable.");
 	}
 
 	module_finish();
